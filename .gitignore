@@ -1,0 +1,6 @@
+!.gitignore
+.ssh/
+template/db_password.txt
+template/db_user.txt
+template/pgadmin_password.txt
+template/dhparam.pem

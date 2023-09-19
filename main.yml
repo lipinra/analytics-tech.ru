@@ -1,0 +1,122 @@
+- hosts: all
+  become: true
+  tasks:
+
+  - name: установка пакетов
+    apt:
+      pkg:
+      - docker-compose
+      - certbot
+      update_cache: yes
+      state: present
+
+  - name: создание структуры каталогов
+    file:
+      path: "{{ item.path }}"
+      state: directory
+      mode: '0750'
+    with_items:
+      - {path: '/root/metabase'}
+      - {path: '/root/metabase/postgres-data'}
+      - {path: '/root/metabase/pgadmin-data'}
+      - {path: '/root/metabase/nginx'}
+      - {path: '/root/metabase/backup'}
+
+  - name: копирование файлов проекта
+    template:
+      src: "{{ item.src }}"
+      dest: "{{ item.dest }}"
+    with_items:
+      - {src: 'template/docker-compose.yml',dest: '/root/metabase/docker-compose.yml'}
+      - {src: 'template/db_password.txt',dest: '/root/metabase/db_password.txt'}
+      - {src: 'template/db_user.txt',dest: '/root/metabase/db_user.txt'}
+      - {src: 'template/pgadmin_password.txt',dest: '/root/metabase/pgadmin_password.txt'}
+      - {src: 'template/nginx.conf',dest: '/root/metabase/nginx/nginx.conf'}
+      - {src: 'template/backup.sh',dest: '/root/metabase/backup.sh'}
+      - {src: 'template/dhparam.pem',dest: '/root/metabase/nginx/dhparam.pem'}
+
+  - name: запуск проекта
+    command: docker-compose --file /root/metabase/docker-compose.yml up -d
+
+  - name: настройка резервного копирования
+    cron:
+      name: "backup"
+      hour: "2"
+      minute: "0"
+      job: "/root/metabase/backup.sh"
+
+  - name: настройка ufw 22 порт
+    ufw:
+      rule: limit
+      port: '22'
+      proto: tcp
+
+  - name: ожидание 5 сек
+    pause:
+      seconds: 5
+
+  - name: настройка ufw 80 порт
+    ufw:
+      rule: allow
+      port: '80'
+      proto: tcp
+
+  - name: ожидание 5 сек
+    pause:
+      seconds: 5
+
+  - name: настройка ufw 443 порт
+    ufw:
+      rule: allow
+      port: '443'
+      proto: tcp
+
+  - name: ожидание 5 сек
+    pause:
+      seconds: 5
+
+  - name: настройка правила ufw для входящего трафика
+    ufw:
+      direction: incoming
+      default: deny
+
+  - name: ожидание 5 сек
+    pause:
+      seconds: 5
+
+  - name: настройка правила ufw для исходящего трафика
+    ufw:
+      direction: outgoing
+      default: allow
+
+  - name: настройка логирования ufw
+    ufw:
+      logging: 'on'
+
+  - name: включение ufw
+    ufw:
+      state: enabled
+
+  - name: запуск certbot для получения сертификатов analytics-tech.ru
+    command: certbot certonly --webroot --webroot-path /var/www/html/ -d analytics-tech.ru -n --agree-tos --email smirnova.natalya.workmail@gmail.com
+
+#  - name: удаление начального файла конфигурации nginx
+#    file:
+#      path: /root/metabase/nginx.conf
+#      state: absent
+
+  - name: копирование нового файла конфигурации nginx
+    template:
+      src: template/nginx_ssl.conf
+      dest: /root/metabase/nginx/nginx.conf
+
+  - name: перезапуск контейнерa с nginx
+    command: docker-compose --file /root/metabase/docker-compose.yml restart nginx
+
+  - name: настройка обновления сертификатов
+    cron:
+      name: "certbot"
+      day: "1"
+      hour: "1"
+      minute: "0"
+      job: "certbot certonly --force-renew -d analytics-tech.ru"

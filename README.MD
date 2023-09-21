@@ -19,15 +19,19 @@ ansible-playbook main.yml
 ssh -i '~/analytics-tech.ru/.ssh/analytics-tech.ru' root@analytics-tech.ru
 ```
 
-После установки доступ к ресурсу проходит по адресу:
+После установки доступ к Metabase проходит по адресу:
 
 https://analytics-tech.ru/
+
+Доступ к Superset проходит по адресу:
+
+https://superset.analytics-tech.ru/
 
 Доступ к pgadmin:
 
 http://analytics-tech.ru/pgadmin
 
-- логин: metabase@lipinr.ru
+- логин: admin@analytics-tech.ru
 - пароль: указан в файле template/pgadmin_password.txt
 
 Подключение к postgresql из pgadmin:

@@ -16,7 +16,8 @@
       state: directory
       mode: '0750'
     with_items:
-      - {path: '/root/metabase'}
+      - {path: '/root/metabase/'}
+      - {path: '/root/metabase/metabase-data'}
       - {path: '/root/metabase/postgres-data'}
       - {path: '/root/metabase/pgadmin-data'}
       - {path: '/root/metabase/nginx'}
@@ -28,6 +29,7 @@
       dest: "{{ item.dest }}"
     with_items:
       - {src: 'template/docker-compose.yml',dest: '/root/metabase/docker-compose.yml'}
+      - {src: 'template/.env',dest: '/root/metabase/.env'}
       - {src: 'template/db_password.txt',dest: '/root/metabase/db_password.txt'}
       - {src: 'template/db_user.txt',dest: '/root/metabase/db_user.txt'}
       - {src: 'template/pgadmin_password.txt',dest: '/root/metabase/pgadmin_password.txt'}
@@ -35,15 +37,15 @@
       - {src: 'template/backup.sh',dest: '/root/metabase/backup.sh'}
       - {src: 'template/dhparam.pem',dest: '/root/metabase/nginx/dhparam.pem'}
 
+  - name: изменение прав на файл скрипта
+    file:
+      path: /root/metabase/backup.sh
+      owner: root
+      group: root
+      mode: '0740'
+
   - name: запуск проекта
     command: docker-compose --file /root/metabase/docker-compose.yml up -d
-
-  - name: настройка резервного копирования
-    cron:
-      name: "backup"
-      hour: "2"
-      minute: "0"
-      job: "/root/metabase/backup.sh"
 
   - name: настройка ufw 22 порт
     ufw:
@@ -98,12 +100,10 @@
       state: enabled
 
   - name: запуск certbot для получения сертификатов analytics-tech.ru
-    command: certbot certonly --webroot --webroot-path /var/www/html/ -d analytics-tech.ru -n --agree-tos --email smirnova.natalya.workmail@gmail.com
+    command: certbot certonly --webroot --webroot-path /var/www/html/ -d analytics-tech.ru -n --agree-tos --email admin@analytics-tech.ru
 
-#  - name: удаление начального файла конфигурации nginx
-#    file:
-#      path: /root/metabase/nginx.conf
-#      state: absent
+  - name: запуск certbot для получения сертификатов superset.analytics-tech.ru
+    command: certbot certonly --webroot --webroot-path /var/www/html/ -d superset.analytics-tech.ru -n --agree-tos --email admin@analytics-tech.ru
 
   - name: копирование нового файла конфигурации nginx
     template:
@@ -113,10 +113,40 @@
   - name: перезапуск контейнерa с nginx
     command: docker-compose --file /root/metabase/docker-compose.yml restart nginx
 
-  - name: настройка обновления сертификатов
+  - name: настройка резервного копирования
+    cron:
+      name: "backup"
+      hour: "2"
+      minute: "0"
+      job: "/root/metabase/backup.sh"
+
+  - name: настройка обновления сертификатов analytics-tech.ru
     cron:
       name: "certbot"
       day: "1"
       hour: "1"
       minute: "0"
       job: "certbot certonly --force-renew -d analytics-tech.ru"
+
+  - name: настройка обновления сертификатов superset.analytics-tech.ru
+    cron:
+      name: "certbot"
+      day: "1"
+      hour: "1"
+      minute: "10"
+      job: "certbot certonly --force-renew -d analytics-tech.ru"
+
+  - name: установка пароля администратора superset
+    command: docker exec -it superset superset fab create-admin --username admin --firstname Superset --lastname Admin --email admin@analytics-tech.ru --password admin
+  
+  - name: обновление локальной БД superset до последней версии
+    command: docker exec -it superset superset db upgrade
+
+  - name: загрузка примеров в superset
+    command: docker exec -it superset superset db upgrade
+
+  - name: обновление локальной БД superset до последней версии
+    command: docker exec -it superset superset load_examples
+
+  - name: установка ролей superset
+    command: docker exec -it superset superset init
